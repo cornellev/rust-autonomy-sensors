@@ -28,6 +28,19 @@ top-level repo README for why. Depend on these directly:
   `zed_reader::ZedDepthFrame`: same four fields, `data: [f32; 672*376]`
   (meters; NaN/inf where the SDK has no valid depth for that pixel).
 
+## Turning depth on or off
+
+Depth (`sl::DEPTH_MODE::NEURAL` by default) is a GPU inference pass, run
+every frame -- not a free extra output. Set `ZED_READER_DEPTH_MODE` to
+`none`, `neural_light`, `neural`, or `neural_plus` to change it.
+`none` skips the depth pipeline in the SDK call itself and `zed-reader` does
+not create the depth service at all. Measured on real hardware: 236 MiB / 1%
+GPU util with `none`, vs. 338 MiB / 6% with `neural` (extra ~100 MB is the
+loaded model).
+
+Library callers pick this the same way: `ZedCamera::open(fps, DepthMode::None)`
+disables it; `camera.depth_enabled()` reports which.
+
 ## Why VGA
 
 Developed against real hardware over a WSL2 + USB/IP passthrough
@@ -46,7 +59,7 @@ Defaults to `/usr/local/zed` and `/usr/local/cuda`; override with
 
 This SDK install has no C API (`libsl_zed_c.so` and
 `sl/c_api/zed_interface.h` are both absent, only the C++ `libsl_zed.so` is
-present). `shim/zed_shim.{h,cpp}` hand-wraps the `sl::Camera` calls this
+present). `cpp/zed_camera.{h,cpp}` hand-wraps the `sl::Camera` calls this
 crate needs, compiled by `build.rs` via the `cc` crate. A future SDK install
 that does ship the C API would be a smaller, more official surface to bind
 against instead.
