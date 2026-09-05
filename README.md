@@ -28,12 +28,18 @@ but we're deliberately not doing that yet:
 rust-autonomy-sensors/
 ├── Cargo.toml         workspace root
 ├── crates/
-│   ├── shm-common/    shared publish/subscribe plumbing used by every reader
-│   ├── zed-reader/    ZED stereo camera -> rectified image + depth + pose
+│   ├── zed-reader/    ZED stereo camera -> left image (see its README)
 │   ├── imu-reader/    (future)
 │   └── gps-reader/    (future)
 └── README.md
 ```
+
+There's no `shm-common` crate: each sensor defines its own concrete
+publish/subscribe interface (service name + payload type) in its own crate,
+per the "why one repo" rationale above -- see `crates/zed-reader/README.md`
+for what that looks like in practice. Pull a shared plumbing crate out only
+once a second or third sensor makes the duplication obviously real, rather
+than guessing at a shared shape now.
 
 Each `crates/<sensor>` package is meant to be pulled individually into
 `rust-autonomy-stack` via a `gitman` source with
@@ -44,7 +50,8 @@ member there, selectable per car in `car.toml` (e.g. `cars/sim` need not run
 
 ## Open questions
 
-- Exact shape of the shared-memory publish/subscribe API in `shm-common`.
 - Per-sensor/camera calibration and extrinsics (needed by anything projecting
   sensor data into 3D downstream) don't have a home yet -- same open question
   `rust-autonomy-stack`'s README raises for per-car hardware constants.
+- `zed-reader` currently publishes the left image only, at VGA, with depth
+  disabled -- see its README for why and what's next.
