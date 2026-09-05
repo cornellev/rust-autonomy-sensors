@@ -12,6 +12,11 @@ unsafe extern "C" {
     pub fn zed_shim_width(cam: zed_shim_handle) -> c_int;
     pub fn zed_shim_height(cam: zed_shim_handle) -> c_int;
     pub fn zed_shim_get_image_bgra(cam: zed_shim_handle, dst: *mut u8, dst_len: usize) -> c_int;
+    pub fn zed_shim_get_depth_f32(
+        cam: zed_shim_handle,
+        dst: *mut f32,
+        dst_len_floats: usize,
+    ) -> c_int;
     pub fn zed_shim_timestamp_ns(cam: zed_shim_handle) -> u64;
     pub fn zed_shim_close(cam: zed_shim_handle);
     pub fn zed_shim_destroy(cam: zed_shim_handle);

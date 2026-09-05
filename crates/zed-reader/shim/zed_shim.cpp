@@ -6,6 +6,7 @@ namespace {
 struct ShimCamera {
     sl::Camera zed;
     sl::Mat image;
+    sl::Mat depth;
     bool opened = false;
 };
 }
@@ -19,7 +20,8 @@ int zed_shim_open(zed_shim_handle handle, int fps) {
     sl::InitParameters init_params;
     init_params.camera_resolution = sl::RESOLUTION::VGA;
     init_params.camera_fps = fps;
-    init_params.depth_mode = sl::DEPTH_MODE::NONE;
+    init_params.depth_mode = sl::DEPTH_MODE::NEURAL;
+    init_params.coordinate_units = sl::UNIT::METER;
     init_params.sdk_verbose = 1;
 
     auto err = cam->zed.open(init_params);
@@ -34,6 +36,7 @@ int zed_shim_grab(zed_shim_handle handle) {
     auto err = cam->zed.grab(rt);
     if (err == sl::ERROR_CODE::SUCCESS) {
         cam->zed.retrieveImage(cam->image, sl::VIEW::LEFT);
+        cam->zed.retrieveMeasure(cam->depth, sl::MEASURE::DEPTH);
     }
     return static_cast<int>(err);
 }
@@ -54,6 +57,15 @@ int zed_shim_get_image_bgra(zed_shim_handle handle, uint8_t* dst, size_t dst_len
                     static_cast<size_t>(cam->image.getHeight()) * 4;
     if (needed == 0 || needed > dst_len) return -1;
     std::memcpy(dst, cam->image.getPtr<sl::uchar1>(sl::MEM::CPU), needed);
+    return 0;
+}
+
+int zed_shim_get_depth_f32(zed_shim_handle handle, float* dst, size_t dst_len_floats) {
+    auto* cam = static_cast<ShimCamera*>(handle);
+    size_t needed = static_cast<size_t>(cam->depth.getWidth()) *
+                    static_cast<size_t>(cam->depth.getHeight());
+    if (needed == 0 || needed > dst_len_floats) return -1;
+    std::memcpy(dst, cam->depth.getPtr<float>(sl::MEM::CPU), needed * sizeof(float));
     return 0;
 }
 

@@ -28,7 +28,7 @@ but we're deliberately not doing that yet:
 rust-autonomy-sensors/
 ├── Cargo.toml         workspace root
 ├── crates/
-│   ├── zed-reader/    ZED stereo camera -> left image (see its README)
+│   ├── zed-reader/    ZED stereo camera -> left image + depth (see its README)
 │   ├── imu-reader/    (future)
 │   └── gps-reader/    (future)
 └── README.md
@@ -53,5 +53,5 @@ member there, selectable per car in `car.toml` (e.g. `cars/sim` need not run
 - Per-sensor/camera calibration and extrinsics (needed by anything projecting
   sensor data into 3D downstream) don't have a home yet -- same open question
   `rust-autonomy-stack`'s README raises for per-car hardware constants.
-- `zed-reader` currently publishes the left image only, at VGA, with depth
-  disabled -- see its README for why and what's next.
+- `zed-reader` publishes left image and depth at VGA. No pose yet -- see its
+  README for why and what's next.

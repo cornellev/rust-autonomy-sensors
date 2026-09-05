@@ -1,66 +1,55 @@
 # zed-reader
 
-Owns the physical ZED camera exclusively and publishes the left image over
-shared memory ([iceoryx2](https://github.com/eclipse-iceoryx/iceoryx2)) for
-the rest of the stack to consume. Nothing else should call the ZED SDK
-directly -- the SDK does not support multiple processes opening the same
-physical device concurrently.
+Owns the physical ZED camera. Publishes image and depth over shared memory
+([iceoryx2](https://github.com/eclipse-iceoryx/iceoryx2)). Nothing else should
+call the ZED SDK directly: the SDK does not allow two processes to open the
+same physical device at once.
 
 ## Status
 
-Image capture -> shared memory is implemented and has been validated against
-real ZED 2 hardware: `zed-reader` publishing and a separate `debug_sub`
-process subscribing, both against the real camera, with live varying frame
-data (see git history / PR description for the session this came from).
-Depth and pose are not published yet -- see "What's next" below.
+Image and depth capture over shared memory work. Validated against real ZED 2
+hardware: `zed-reader` publishing, a separate `debug_sub` process subscribing
+to the image stream, both against the real camera, live varying frame data,
+zero grab failures over hundreds of frames. Depth values checked against real
+hardware too (0.1-1.7m range, ~52% valid pixels, matched a close indoor
+scene). Pose is not published yet.
 
 ## The interface
 
-This is a concrete, single-sensor interface, not a standardized one -- see
-the top-level repo README for why. If you're consuming ZED frames, depend on
-`zed_reader::ZedFrame` and `zed_reader::IMAGE_SERVICE_NAME` directly.
+A concrete, single-sensor interface, not a standardized one. See the
+top-level repo README for why. Depend on these directly:
 
-- **Service name**: `zed/zed2/image_left_vga_bgra` (`iceoryx2`
-  publish-subscribe).
-- **Payload**: `zed_reader::ZedFrame` (`#[repr(C)]`) --
-  `frame_id: u64` (per-process counter, not persisted across restarts),
-  `timestamp_ns: u64` (the ZED SDK's own clock,
-  `sl::TIME_REFERENCE::IMAGE`), `width: u32`, `height: u32` (both currently
-  always 672x376), `data: [u8; 672*376*4]` (BGRA, left camera, no
-  distortion/rectification beyond what the SDK does by default).
+- **Image**: service `zed/zed2/image_left_vga_bgra`, payload
+  `zed_reader::ZedFrame` (`#[repr(C)]`): `frame_id: u64` (per-process counter,
+  resets on restart), `timestamp_ns: u64` (ZED SDK clock,
+  `sl::TIME_REFERENCE::IMAGE`), `width: u32`, `height: u32` (672x376 today),
+  `data: [u8; 672*376*4]` (BGRA, left camera).
+- **Depth**: service `zed/zed2/depth_vga_f32`, payload
+  `zed_reader::ZedDepthFrame`: same four fields, `data: [f32; 672*376]`
+  (meters; NaN/inf where the SDK has no valid depth for that pixel).
 
-## Why VGA, why no depth (for now)
+## Why VGA
 
-Developed against real camera hardware over a WSL2 + USB/IP passthrough
-(`usbipd-win`), since that's what was available during initial development.
-The SDK's own diagnostic tool reported higher resolutions as unreliable over
-that specific passthrough (USB/IP does not reliably carry the sustained
-high-bandwidth isochronous transfers full-resolution UVC video needs) --
-confirmed by `dmesg` showing repeated `vhci_hcd` connection resets during a
-higher-resolution test. VGA capture was validated with zero grab failures
-over hundreds of frames. This may be a passthrough-specific limitation, not a
-real constraint on the Jetson (no USB/IP in that path) -- re-validate at
-higher resolutions once this runs there directly.
-
-Depth is disabled (`sl::DEPTH_MODE::NONE`) in this first pass to keep scope to
-"prove image capture -> real SHM end-to-end on real hardware." Depth doesn't
-cost extra USB bandwidth (it's computed from the same stereo pair, not
-transmitted separately), so adding a second published stream for it is a
-straightforward follow-up, not a redesign.
+Developed against real hardware over a WSL2 + USB/IP passthrough
+(`usbipd-win`). The SDK's own diagnostic reported higher resolutions as
+unreliable over that passthrough; `dmesg` showed repeated `vhci_hcd`
+connection resets during a higher-resolution test. VGA had zero grab
+failures over hundreds of frames. USB/IP may be the real constraint here, not
+the SDK or the camera -- re-check at higher resolutions on the Jetson (no
+USB/IP there).
 
 ## Building
 
-Needs the ZED SDK (tested against a build with CUDA 13.1 / `libsl_zed.so`)
-and CUDA installed. Defaults to `/usr/local/zed` and `/usr/local/cuda`;
-override with the `ZED_SDK_DIR` / `CUDA_DIR` env vars if yours differ.
+Needs the ZED SDK (tested against CUDA 13.1 / `libsl_zed.so`) and CUDA.
+Defaults to `/usr/local/zed` and `/usr/local/cuda`; override with
+`ZED_SDK_DIR` / `CUDA_DIR` if yours differ.
 
-This SDK install has no C API (`libsl_zed_c.so` / `sl/c_api/zed_interface.h`
-are absent, only the C++ `libsl_zed.so`) -- `shim/zed_shim.{h,cpp}` is a
-small hand-written C-linkage wrapper around the handful of `sl::Camera` calls
-this crate needs (`open`/`grab`/`retrieveImage`/`getTimestamp`/`close`),
-compiled by `build.rs` via the `cc` crate. If a future SDK install does ship
-the C API, that would be a smaller and more official surface to bind against
-instead.
+This SDK install has no C API (`libsl_zed_c.so` and
+`sl/c_api/zed_interface.h` are both absent, only the C++ `libsl_zed.so` is
+present). `shim/zed_shim.{h,cpp}` hand-wraps the `sl::Camera` calls this
+crate needs, compiled by `build.rs` via the `cc` crate. A future SDK install
+that does ship the C API would be a smaller, more official surface to bind
+against instead.
 
 ```
 cargo build --release -p zed-reader
@@ -72,22 +61,19 @@ cargo build --release -p zed-reader
 RUST_LOG=info ./target/release/zed-reader
 ```
 
-Verify it end-to-end (separate process, real shared memory, no code shared
-with the publisher beyond the `zed_reader` lib crate):
+Verify the image stream end-to-end (separate process, real shared memory):
 
 ```
 RUST_LOG=info DEBUG_SUB_MAX_FRAMES=60 ./target/release/debug_sub
 ```
 
-`debug_sub` is a verification tool, not a reference consumer -- it prints
-frame dimensions, inter-frame latency, and a sparse checksum of the pixel
-data per frame so you can confirm real (not static/garbage) frames are
-arriving, without printing a megabyte of pixel data per line.
+`debug_sub` is a verification tool, not a reference consumer. It prints
+frame dimensions, inter-frame latency, and a sparse pixel checksum per
+frame, so you can confirm real (not static or garbage) frames arrive,
+without printing a megabyte of pixel data per line.
 
 ## What's next
 
-- Publish depth and pose alongside the image (separate `iceoryx2` services,
-  or a combined payload -- not decided yet).
-- Re-validate resolution limits on the Jetson directly, without USB/IP in the
-  path.
+- Publish pose.
+- Re-check resolution limits on the Jetson, without USB/IP in the path.
 - Calibration/extrinsics: no home yet, see top-level repo README.

@@ -32,6 +32,10 @@ int zed_shim_height(zed_shim_handle cam);
 // succeeded.
 int zed_shim_get_image_bgra(zed_shim_handle cam, uint8_t* dst, size_t dst_len);
 
+// Copies the depth map (meters, one float per pixel) into dst (dst_len_floats
+// elements). Same 0/non-zero return convention as zed_shim_get_image_bgra.
+int zed_shim_get_depth_f32(zed_shim_handle cam, float* dst, size_t dst_len_floats);
+
 uint64_t zed_shim_timestamp_ns(zed_shim_handle cam);
 
 void zed_shim_close(zed_shim_handle cam);
