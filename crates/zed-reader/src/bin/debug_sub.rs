@@ -1,8 +1,5 @@
-//! Standalone verification tool, not a real consumer: subscribes to
-//! zed-reader's image service and prints a summary per frame (dimensions,
-//! timestamp delta, a checksum of the pixel data) so we can confirm the SHM
-//! path actually carries real frames end-to-end, separately from whatever
-//! the eventual downstream consumer looks like.
+//! Verification tool, not a reference consumer. Subscribes to the image
+//! service and prints one summary line per frame.
 use anyhow::Result;
 use iceoryx2::prelude::*;
 use zed_reader::open_image_service;

@@ -1,42 +1,33 @@
-//! ZED camera capture + the shared-memory interface it publishes on.
-//!
-//! This is a concrete, single-sensor interface, not a standardized one --
-//! see the repo README. Anyone consuming ZED frames should depend on
-//! [`ZedFrame`] and [`IMAGE_SERVICE_NAME`] directly rather than expecting a
-//! generic sensor abstraction.
+//! Concrete ZED SHM interface. See crate README. Depend on `ZedFrame` and
+//! `IMAGE_SERVICE_NAME` directly, not a generic sensor abstraction.
 pub mod ffi;
 
 use anyhow::{Result, bail};
 use iceoryx2::prelude::*;
 
-/// Fixed for now: the SDK diagnostic showed higher resolutions are
-/// unreliable over the WSL USB/IP passthrough used during development, and
-/// VGA is what the pipeline this is replacing already used. Revisit once
-/// this is validated on the Jetson directly (no USB/IP in the loop there).
+/// VGA. Higher resolutions failed over the dev-machine USB/IP passthrough.
+/// Re-check on the Jetson (no USB/IP there). See README.
 pub const WIDTH: usize = 672;
 pub const HEIGHT: usize = 376;
 pub const BGRA_LEN: usize = WIDTH * HEIGHT * 4;
 
-/// iceoryx2 service name for the left BGRA image stream. One service per
-/// concern, matching one physical sensor -- see crate README.
 pub const IMAGE_SERVICE_NAME: &str = "zed/zed2/image_left_vga_bgra";
 
-/// One published frame. `#[repr(C)]` and every field `ZeroCopySend` per
-/// iceoryx2's requirements for a zero-copy payload type.
+/// One published frame. `#[repr(C)]` and every field `ZeroCopySend`: an
+/// `iceoryx2` payload type requirement.
 #[repr(C)]
 #[derive(Debug, ZeroCopySend)]
 pub struct ZedFrame {
-    /// Monotonically increasing per-process, not persisted across restarts.
+    /// Per-process counter. Resets on restart.
     pub frame_id: u64,
-    /// From the ZED SDK's own clock (`sl::TIME_REFERENCE::IMAGE`), nanoseconds.
+    /// ZED SDK clock, `sl::TIME_REFERENCE::IMAGE`, nanoseconds.
     pub timestamp_ns: u64,
     pub width: u32,
     pub height: u32,
     pub data: [u8; BGRA_LEN],
 }
 
-/// Safe RAII wrapper around the zed_shim handle. Fixed at VGA/no-depth; see
-/// `WIDTH`/`HEIGHT`.
+/// RAII wrapper around the zed_shim handle. Fixed at VGA, no depth.
 pub struct ZedCamera {
     handle: ffi::zed_shim_handle,
 }
@@ -57,13 +48,10 @@ impl ZedCamera {
         Ok(Self { handle })
     }
 
-    /// Blocks until a frame is available, then writes it directly into
-    /// `out` in place via raw pointer field writes -- deliberately takes
-    /// `MaybeUninit` rather than `&mut ZedFrame` so this can write straight
-    /// into a loaned-but-uninitialized iceoryx2 sample (i.e. directly into
-    /// shared memory) without ever materializing a ~1 MiB `ZedFrame` on the
-    /// stack first, and without forming a `&mut ZedFrame` over memory that
-    /// isn't fully initialized yet.
+    /// Grabs one frame and writes it into `out` in place. Takes
+    /// `MaybeUninit`, not `&mut ZedFrame`: this can write straight into a
+    /// loaned iceoryx2 sample (shared memory) with no full-frame stack copy,
+    /// and never forms a reference to not-yet-initialized memory.
     pub fn grab_into(
         &mut self,
         frame_id: u64,
@@ -82,8 +70,7 @@ impl ZedCamera {
         let ptr = out.as_mut_ptr();
         unsafe {
             let data_ptr = std::ptr::addr_of_mut!((*ptr).data) as *mut u8;
-            let copy_err = ffi::zed_shim_get_image_bgra(self.handle, data_ptr, BGRA_LEN);
-            if copy_err != 0 {
+            if ffi::zed_shim_get_image_bgra(self.handle, data_ptr, BGRA_LEN) != 0 {
                 bail!("zed_shim_get_image_bgra failed");
             }
             let timestamp_ns = ffi::zed_shim_timestamp_ns(self.handle);
@@ -105,9 +92,8 @@ impl Drop for ZedCamera {
     }
 }
 
-/// Opens (or creates) the image publish-subscribe service. Shared by the
-/// reader (publisher side) and any consumer/debug tooling (subscriber side)
-/// so both agree on the exact service name and payload type in one place.
+/// Opens (or creates) the image publish-subscribe service. One place for
+/// publisher and subscriber binaries to agree on name and type.
 pub fn open_image_service(
     node: &Node<ipc::Service>,
 ) -> Result<

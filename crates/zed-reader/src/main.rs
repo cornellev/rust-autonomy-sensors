@@ -1,6 +1,5 @@
-//! zed-reader: owns the physical ZED camera exclusively and publishes the
-//! left image over shared memory (iceoryx2). See crate README for the SHM
-//! interface (service name + payload layout) and lib.rs for both.
+//! Owns the ZED camera and publishes the left image over `iceoryx2`. See
+//! crate README for the SHM interface.
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -45,9 +44,7 @@ fn main() -> Result<()> {
             continue;
         }
 
-        // SAFETY: grab_into just fully initialized every field of the
-        // payload (frame_id, timestamp_ns, width, height, data) or returned
-        // Err above without reaching here.
+        // SAFETY: grab_into wrote every field above, or returned Err.
         let sample = unsafe { sample.assume_init() };
         if let Err(e) = sample.send() {
             tracing::warn!(error = %e, "send failed");
