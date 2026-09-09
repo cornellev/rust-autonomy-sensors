@@ -20,7 +20,7 @@ standard rust shm interface, it applies to all sensors at once.
 rust-autonomy-sensors/
 ├── Cargo.toml         workspace root
 ├── crates/
-│   ├── zed-reader/    ZED stereo camera -> left image (see its README)
+│   ├── zed-reader/    ZED stereo camera -> left image + depth (see its README)
 │   ├── imu-reader/    (future)
 │   └── gps-reader/    (future)
 └── README.md

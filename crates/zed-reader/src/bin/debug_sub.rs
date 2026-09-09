@@ -2,7 +2,7 @@
 //! service and prints one summary line per frame.
 use anyhow::Result;
 use iceoryx2::prelude::*;
-use zed_reader::open_image_service;
+use zed_reader::{IMAGE_SERVICE_NAME, ZedFrame, open_service};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -10,9 +10,9 @@ fn main() -> Result<()> {
         .init();
 
     let node = NodeBuilder::new().create::<ipc::Service>()?;
-    let service = open_image_service(&node)?;
+    let service = open_service::<ZedFrame>(&node, IMAGE_SERVICE_NAME)?;
     let subscriber = service.subscriber_builder().create()?;
-    tracing::info!(service = zed_reader::IMAGE_SERVICE_NAME, "subscribed");
+    tracing::info!(service = IMAGE_SERVICE_NAME, "subscribed");
 
     let mut last_ts: Option<u64> = None;
     let mut received = 0u64;

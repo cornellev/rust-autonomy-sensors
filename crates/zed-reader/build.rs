@@ -19,11 +19,11 @@ fn main() {
 
     cc::Build::new()
         .cpp(true)
-        .file("shim/zed_shim.cpp")
+        .file("cpp/zed_camera.cpp")
         .include(&zed_include)
         .include(&cuda_include)
         .flag_if_supported("-std=c++17")
-        .compile("zed_shim");
+        .compile("zed_camera");
 
     println!("cargo:rustc-link-search=native={}", zed_lib.display());
     println!("cargo:rustc-link-search=native={}", cuda_lib.display());
@@ -32,8 +32,8 @@ fn main() {
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", zed_lib.display());
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", cuda_lib.display());
 
-    println!("cargo:rerun-if-changed=shim/zed_shim.cpp");
-    println!("cargo:rerun-if-changed=shim/zed_shim.h");
+    println!("cargo:rerun-if-changed=cpp/zed_camera.cpp");
+    println!("cargo:rerun-if-changed=cpp/zed_camera.h");
     println!("cargo:rerun-if-env-changed=ZED_SDK_DIR");
     println!("cargo:rerun-if-env-changed=CUDA_DIR");
 }
