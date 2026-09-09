@@ -5,51 +5,41 @@ Owns the physical ZED camera. Publishes image and depth over shared memory
 call the ZED SDK directly: the SDK does not allow two processes to open the
 same physical device at once.
 
-## Status
+## Interface
 
-Image and depth capture over shared memory work. Validated against real ZED 2
-hardware: `zed-reader` publishing, a separate `debug_sub` process subscribing
-to the image stream, both against the real camera, live varying frame data,
-zero grab failures over hundreds of frames. Depth values checked against real
-hardware too (0.1-1.7m range, ~52% valid pixels, matched a close indoor
-scene). Pose is not published yet.
+See ZED camera sources:
 
-## The interface
+- [API Reference](https://www.stereolabs.com/developers/documentation/API/)
+- [Camera Overview](https://docs.stereolabs.com/docs/development/zed-sdk/modules/camera)
+- [Camera Controls](https://docs.stereolabs.com/docs/development/zed-sdk/modules/camera/camera-controls)
+- [zed-sdk on GitHub](https://github.com/stereolabs/zed-sdk)
 
-A concrete, single-sensor interface, not a standardized one. See the
-top-level repo README for why. Depend on these directly:
+## Shared Memory Layout
 
-- **Image**: service `zed/zed2/image_left_vga_bgra`, payload
-  `zed_reader::ZedFrame` (`#[repr(C)]`): `frame_id: u64` (per-process counter,
-  resets on restart), `timestamp_ns: u64` (ZED SDK clock,
-  `sl::TIME_REFERENCE::IMAGE`), `width: u32`, `height: u32` (672x376 today),
+Each of the ZED camera and ZED Neural Depth are published as `iceoryx2` publish-subscribe services in shared memory. Each payload is a
+flat `#[repr(C)]` struct. Currently the only supported size is VGA (672x376), and only the left camera is used. This is planned to be expanded to both camera lenses in multiple possible output sizes (see https://github.com/cornellev/rust-autonomy-sensors/issues/4).
+- **Image**: service `zed/zed2/image_left_vga_bgra`, payload `ZedFrame`:
+  `frame_id: u64`, `timestamp_ns: u64`, `width: u32`, `height: u32`,
   `data: [u8; 672*376*4]` (BGRA, left camera).
-- **Depth**: service `zed/zed2/depth_vga_f32`, payload
-  `zed_reader::ZedDepthFrame`: same four fields, `data: [f32; 672*376]`
-  (meters; NaN/inf where the SDK has no valid depth for that pixel).
+- **Depth**: service `zed/zed2/depth_vga_f32`, payload `ZedDepthFrame`: same
+  four header fields, `data: [f32; 672*376]` (meters). NaN/inf marks a pixel
+  with no valid depth -- check `is_finite()` before use.
 
-## Turning depth on or off
+`frame_id` ties the two streams to the same grab, but they are sent
+separately: a depth send can fail (and only log a warning) while its image
+frame still goes out. Do not assume 1:1 delivery -- join on `frame_id` and
+tolerate a missing depth frame for a given image.
 
+## ZED Neural Depth
 Depth (`sl::DEPTH_MODE::NEURAL` by default) is a GPU inference pass, run
-every frame -- not a free extra output. Set `ZED_READER_DEPTH_MODE` to
+every frame. Set `ZED_READER_DEPTH_MODE` to
 `none`, `neural_light`, `neural`, or `neural_plus` to change it.
 `none` skips the depth pipeline in the SDK call itself and `zed-reader` does
-not create the depth service at all. Measured on real hardware: 236 MiB / 1%
-GPU util with `none`, vs. 338 MiB / 6% with `neural` (extra ~100 MB is the
-loaded model).
+not create the depth service at all.
 
 Library callers pick this the same way: `ZedCamera::open(fps, DepthMode::None)`
 disables it; `camera.depth_enabled()` reports which.
 
-## Why VGA
-
-Developed against real hardware over a WSL2 + USB/IP passthrough
-(`usbipd-win`). The SDK's own diagnostic reported higher resolutions as
-unreliable over that passthrough; `dmesg` showed repeated `vhci_hcd`
-connection resets during a higher-resolution test. VGA had zero grab
-failures over hundreds of frames. USB/IP may be the real constraint here, not
-the SDK or the camera -- re-check at higher resolutions on the Jetson (no
-USB/IP there).
 
 ## Building
 
@@ -80,13 +70,9 @@ Verify the image stream end-to-end (separate process, real shared memory):
 RUST_LOG=info DEBUG_SUB_MAX_FRAMES=60 ./target/release/debug_sub
 ```
 
-`debug_sub` is a verification tool, not a reference consumer. It prints
+`debug_sub` prints
 frame dimensions, inter-frame latency, and a sparse pixel checksum per
 frame, so you can confirm real (not static or garbage) frames arrive,
 without printing a megabyte of pixel data per line.
 
-## What's next
 
-- Publish pose.
-- Re-check resolution limits on the Jetson, without USB/IP in the path.
-- Calibration/extrinsics: no home yet, see top-level repo README.
