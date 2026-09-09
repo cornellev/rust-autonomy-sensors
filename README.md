@@ -25,6 +25,7 @@ rust-autonomy-sensors/
 │   └── gps-reader/    (future)
 └── README.md
 ```
+Documentation for each sensor is contained in separate `README.md` files within each crate.
 
 There's no `shm-common` crate: each sensor defines its own concrete
 publish/subscribe interface (service name + payload type) in its own crate,
