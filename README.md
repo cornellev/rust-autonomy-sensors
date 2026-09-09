@@ -26,6 +26,7 @@ rust-autonomy-sensors/
 │   └── gps-reader/    (future)
 └── README.md
 ```
+Documentation for each sensor is contained in separate `README.md` files within each crate.
 
 Each `crates/<sensor>` package is meant to be pulled individually into
 `rust-autonomy-stack` via a `gitman` source with
