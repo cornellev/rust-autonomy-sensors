@@ -20,13 +20,19 @@ standard rust shm interface, it applies to all sensors at once.
 rust-autonomy-sensors/
 ├── Cargo.toml         workspace root
 ├── crates/
-│   ├── shm-common/    shared publish/subscribe plumbing used by every reader
-│   ├── zed-reader/    ZED stereo camera -> rectified image + depth + pose
+│   ├── zed-reader/    ZED stereo camera -> left image (see its README)
 │   ├── imu-reader/    (future)
 │   └── gps-reader/    (future)
 └── README.md
 ```
 Documentation for each sensor is contained in separate `README.md` files within each crate.
+
+There's no `shm-common` crate: each sensor defines its own concrete
+publish/subscribe interface (service name + payload type) in its own crate,
+per the "why one repo" rationale above -- see `crates/zed-reader/README.md`
+for what that looks like in practice. Pull a shared plumbing crate out only
+once a second or third sensor makes the duplication obviously real, rather
+than guessing at a shared shape now.
 
 Each `crates/<sensor>` package is meant to be pulled individually into
 `rust-autonomy-stack` via a `gitman` source with

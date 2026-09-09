@@ -1,0 +1,16 @@
+[package]
+name = "zed-reader"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+iceoryx2 = "0.9"
+ctrlc.workspace = true
+
+[build-dependencies]
+cc = "1"
