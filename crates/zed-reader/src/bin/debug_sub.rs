@@ -1,5 +1,3 @@
-//! Verification tool, not a reference consumer. Subscribes to the Zenoh image
-//! key and prints one summary line per frame, including whether SHM was used.
 use anyhow::Result;
 use zed_reader::{IMAGE_KEY_EXPR, decode_image_frame, zenoh_config_from_env};
 use zenoh::{Wait, handlers::RingChannel};
@@ -12,8 +10,6 @@ fn main() -> Result<()> {
     let session = zenoh::open(zenoh_config_from_env()?)
         .wait()
         .map_err(|error| anyhow::anyhow!("open Zenoh session: {error}"))?;
-    // Camera data should stay fresh. If this tool falls behind, release old SHM
-    // references instead of retaining hundreds of full frames in a FIFO.
     let subscriber = session
         .declare_subscriber(IMAGE_KEY_EXPR)
         .with(RingChannel::new(4))
@@ -41,7 +37,7 @@ fn main() -> Result<()> {
         let checksum: u64 = frame
             .data
             .iter()
-            .step_by(4099) // sample, don't sum a megabyte every frame
+            .step_by(4099)
             .map(|&byte| byte as u64)
             .sum();
         let dt_ms = last_ts
@@ -61,10 +57,5 @@ fn main() -> Result<()> {
     }
 
     tracing::info!(received, "done");
-    drop(subscriber);
-    session
-        .close()
-        .wait()
-        .map_err(|error| anyhow::anyhow!("close Zenoh session: {error}"))?;
     Ok(())
 }
