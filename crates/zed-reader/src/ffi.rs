@@ -16,8 +16,8 @@ unsafe extern "C" {
     -> c_int;
     pub fn zed_camera_get_depth_f32(
         cam: zed_camera_handle,
-        dst: *mut f32,
-        dst_len_floats: usize,
+        dst: *mut u8,
+        dst_len_bytes: usize,
     ) -> c_int;
     pub fn zed_camera_timestamp_ns(cam: zed_camera_handle) -> u64;
     pub fn zed_camera_close(cam: zed_camera_handle);

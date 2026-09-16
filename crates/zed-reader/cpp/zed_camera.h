@@ -36,9 +36,9 @@ int zed_camera_height(zed_camera_handle cam);
 // succeeded.
 int zed_camera_get_image_bgra(zed_camera_handle cam, uint8_t* dst, size_t dst_len);
 
-// Copies the depth map (meters, one float per pixel) into dst
-// (dst_len_floats elements). Returns -2 if depth_mode was NONE at open.
-int zed_camera_get_depth_f32(zed_camera_handle cam, float* dst, size_t dst_len_floats);
+// Copies the depth map (meters, little-endian float32 values) into dst.
+// Returns -2 if depth_mode was NONE at open.
+int zed_camera_get_depth_f32(zed_camera_handle cam, uint8_t* dst, size_t dst_len_bytes);
 
 uint64_t zed_camera_timestamp_ns(zed_camera_handle cam);
 

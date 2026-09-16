@@ -9,7 +9,7 @@ license.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-iceoryx2 = "0.9"
+zenoh = { version = "1.10", features = ["shared-memory", "unstable"] }
 ctrlc.workspace = true
 
 [build-dependencies]

@@ -68,12 +68,12 @@ int zed_camera_get_image_bgra(zed_camera_handle handle, uint8_t* dst, size_t dst
     return 0;
 }
 
-int zed_camera_get_depth_f32(zed_camera_handle handle, float* dst, size_t dst_len_floats) {
+int zed_camera_get_depth_f32(zed_camera_handle handle, uint8_t* dst, size_t dst_len_bytes) {
     auto* cam = static_cast<Camera*>(handle);
     if (!cam->depth_enabled) return -2;
     size_t needed = static_cast<size_t>(cam->depth.getWidth()) *
                     static_cast<size_t>(cam->depth.getHeight());
-    if (needed == 0 || needed > dst_len_floats) return -1;
+    if (needed == 0 || needed * sizeof(float) > dst_len_bytes) return -1;
     std::memcpy(dst, cam->depth.getPtr<float>(sl::MEM::CPU), needed * sizeof(float));
     return 0;
 }

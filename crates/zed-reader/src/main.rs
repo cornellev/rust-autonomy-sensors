@@ -1,15 +1,14 @@
-//! Owns the ZED camera and publishes image + depth over `iceoryx2`. See
-//! crate README for the SHM interface and the `ZED_READER_DEPTH_MODE`
-//! env var.
+//! Owns the ZED camera and publishes image + depth as explicit Zenoh shared-
+//! memory payloads. See the crate README for the wire format and configuration.
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::Result;
-use iceoryx2::prelude::*;
 use zed_reader::{
-    DEPTH_SERVICE_NAME, DepthMode, IMAGE_SERVICE_NAME, ZedCamera, ZedDepthFrame, ZedFrame,
-    open_service,
+    DEPTH_FRAME_LEN, DEPTH_KEY_EXPR, DepthMode, FRAME_ENCODING, IMAGE_FRAME_LEN, IMAGE_KEY_EXPR,
+    ZedCamera, allocate_frame, create_shm_provider, shm_pool_size_from_env, zenoh_config_from_env,
 };
+use zenoh::{Wait, qos::CongestionControl};
 
 const FPS: i32 = 30;
 const LOG_EVERY_N_FRAMES: u64 = 30;
@@ -27,69 +26,76 @@ fn main() -> Result<()> {
         Ok(s) => DepthMode::parse(&s)?,
         Err(_) => DepthMode::Neural,
     };
+    let shm_pool_size = shm_pool_size_from_env()?;
+
+    let session = zenoh::open(zenoh_config_from_env()?)
+        .wait()
+        .map_err(|error| anyhow::anyhow!("open Zenoh session: {error}"))?;
+    let provider = create_shm_provider(shm_pool_size)?;
+    let image_pub = session
+        .declare_publisher(IMAGE_KEY_EXPR)
+        .encoding(FRAME_ENCODING)
+        .congestion_control(CongestionControl::Drop)
+        .wait()
+        .map_err(|error| anyhow::anyhow!("declare image publisher: {error}"))?;
+
     tracing::info!(?depth_mode, "opening ZED camera at {FPS} fps (VGA)");
     let mut camera = ZedCamera::open(FPS, depth_mode)?;
-
-    let node = NodeBuilder::new().create::<ipc::Service>()?;
-    let image_pub = open_service::<ZedFrame>(&node, IMAGE_SERVICE_NAME)?
-        .publisher_builder()
-        .create()?;
     let depth_pub = if camera.depth_enabled() {
         Some(
-            open_service::<ZedDepthFrame>(&node, DEPTH_SERVICE_NAME)?
-                .publisher_builder()
-                .create()?,
+            session
+                .declare_publisher(DEPTH_KEY_EXPR)
+                .encoding(FRAME_ENCODING)
+                .congestion_control(CongestionControl::Drop)
+                .wait()
+                .map_err(|error| anyhow::anyhow!("declare depth publisher: {error}"))?,
         )
     } else {
         None
     };
     tracing::info!(
-        image = IMAGE_SERVICE_NAME,
+        image = IMAGE_KEY_EXPR,
+        depth = DEPTH_KEY_EXPR,
         depth_enabled = camera.depth_enabled(),
-        "publishing"
+        shm_pool_mib = shm_pool_size / (1024 * 1024),
+        "publishing over Zenoh SHM"
     );
 
     let mut frame_id: u64 = 0;
     let mut last_log_ts = std::time::Instant::now();
 
     while running.load(Ordering::SeqCst) {
-        if let Err(e) = camera.grab() {
-            tracing::warn!(error = %e, "grab failed, retrying");
+        if let Err(error) = camera.grab() {
+            tracing::warn!(%error, "grab failed, retrying");
             continue;
         }
 
-        let mut image_sample = match image_pub.loan_uninit() {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::warn!(error = %e, "image loan_uninit failed");
+        let mut image = match allocate_frame(&provider, IMAGE_FRAME_LEN) {
+            Ok(buffer) => buffer,
+            Err(error) => {
+                tracing::warn!(%error, "image SHM allocation failed");
                 continue;
             }
         };
-        if let Err(e) = camera.read_image_into(frame_id, image_sample.payload_mut()) {
-            tracing::warn!(error = %e, "read_image_into failed");
+        if let Err(error) = camera.read_image_into(frame_id, &mut image) {
+            tracing::warn!(%error, "read_image_into failed");
             continue;
         }
-        // SAFETY: read_image_into wrote every field above, or returned Err.
-        let image_sample = unsafe { image_sample.assume_init() };
-        if let Err(e) = image_sample.send() {
-            tracing::warn!(error = %e, "image send failed");
+        if let Err(error) = image_pub.put(image).wait() {
+            tracing::warn!(%error, "image publish failed");
         }
 
         if let Some(depth_pub) = &depth_pub {
-            match depth_pub.loan_uninit() {
-                Ok(mut depth_sample) => {
-                    match camera.read_depth_into(frame_id, depth_sample.payload_mut()) {
-                        Ok(()) => {
-                            // SAFETY: read_depth_into just wrote every field.
-                            let depth_sample = unsafe { depth_sample.assume_init() };
-                            if let Err(e) = depth_sample.send() {
-                                tracing::warn!(error = %e, "depth send failed");
-                            }
+            match allocate_frame(&provider, DEPTH_FRAME_LEN) {
+                Ok(mut depth) => match camera.read_depth_into(frame_id, &mut depth) {
+                    Ok(()) => {
+                        if let Err(error) = depth_pub.put(depth).wait() {
+                            tracing::warn!(%error, "depth publish failed");
                         }
-                        Err(e) => tracing::warn!(error = %e, "read_depth_into failed"),
                     }
-                }
-                Err(e) => tracing::warn!(error = %e, "depth loan_uninit failed"),
+                    Err(error) => tracing::warn!(%error, "read_depth_into failed"),
+                },
+                Err(error) => tracing::warn!(%error, "depth SHM allocation failed"),
             }
         }
 
@@ -103,5 +109,11 @@ fn main() -> Result<()> {
     }
 
     tracing::info!("shutting down");
+    drop(depth_pub);
+    drop(image_pub);
+    session
+        .close()
+        .wait()
+        .map_err(|error| anyhow::anyhow!("close Zenoh session: {error}"))?;
     Ok(())
 }
