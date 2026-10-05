@@ -1,8 +1,8 @@
 //! IMU sample: body frame angular rate and specific force
 use crate::error::{SensorError, check_finite};
 
+/// only way to get values is by creating an IMU object that is valid
 #[derive(Debug, Clone, Copy, PartialEq)]
-// only way to get values is by creating an IMU object that is valid
 pub struct IMU {
     stamp_ns: u64,
     gyro_rad_s: [f64; 3],

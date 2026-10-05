@@ -1,5 +1,4 @@
-//! Error struct for constructing sensor measurements
-//! i.e. - when a sensor is missing or configured incorrectly
+//! Error struct for constructing sensor measurements from raw readings and handling NaN values
 
 use std::fmt;
 
@@ -24,8 +23,6 @@ impl fmt::Display for SensorError {
 
 impl std::error::Error for SensorError {} // implementation for anyhow library use
 
-//NOTE: should this change to be an nalgebra vec, or should the conversion take place in the
-//estimator?
 pub(crate) fn check_finite(field: &'static str, values: &[f64]) -> Result<(), SensorError> {
     for &v in values {
         if !v.is_finite() {

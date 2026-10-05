@@ -112,6 +112,13 @@ mod tests {
     }
 
     #[test]
+    fn nan_altitude_is_rejected() {
+        let (lat, lon, _) = ITHACA;
+        let err = GPS::new(10, lat, lon, f64::NAN, [4.0; 3]).unwrap_err();
+        assert_eq!(err, SensorError::NonFinite { field: "alt_m"});
+    }
+
+    #[test]
     fn zero_variance_is_rejected() {
         let (lat, lon, alt) = ITHACA;
         let err = GPS::new(10, lat, lon, alt, [4.0, 0.0, 9.0]).unwrap_err();
