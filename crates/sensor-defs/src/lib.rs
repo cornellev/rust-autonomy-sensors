@@ -5,9 +5,11 @@
 #![allow(clippy::upper_case_acronyms)]
 
 pub mod error;
+pub mod estimate;
 pub mod gps;
 pub mod imu;
 
 pub use error::SensorError;
+pub use estimate::{Propagate, Reject, Update};
 pub use gps::GPS;
 pub use imu::IMU;

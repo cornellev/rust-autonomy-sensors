@@ -115,7 +115,7 @@ mod tests {
     fn nan_altitude_is_rejected() {
         let (lat, lon, _) = ITHACA;
         let err = GPS::new(10, lat, lon, f64::NAN, [4.0; 3]).unwrap_err();
-        assert_eq!(err, SensorError::NonFinite { field: "alt_m"});
+        assert_eq!(err, SensorError::NonFinite { field: "alt_m" });
     }
 
     #[test]
