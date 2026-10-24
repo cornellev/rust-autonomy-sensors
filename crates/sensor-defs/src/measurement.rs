@@ -32,7 +32,6 @@ impl From<GPS> for Measurement {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

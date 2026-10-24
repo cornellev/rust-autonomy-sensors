@@ -9,9 +9,11 @@ pub mod estimate;
 pub mod gps;
 pub mod imu;
 pub mod measurement;
+pub mod msg_type;
 
 pub use error::SensorError;
 pub use estimate::{Propagate, Reject, Update};
 pub use gps::GPS;
 pub use imu::IMU;
 pub use measurement::Measurement;
+pub use msg_type::MsgType;
