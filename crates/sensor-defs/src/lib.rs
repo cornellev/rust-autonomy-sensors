@@ -1,0 +1,19 @@
+//! Sensor definitions shared by readers, estimators, and controllers.
+//!
+//! Plain data only: this crate knows what a sensor *measures*, not how any
+//! estimator uses it.
+#![allow(clippy::upper_case_acronyms)]
+
+pub mod error;
+pub mod estimate;
+pub mod gps;
+pub mod imu;
+pub mod measurement;
+pub mod msg_type;
+
+pub use error::SensorError;
+pub use estimate::{Propagate, Reject, Update};
+pub use gps::GPS;
+pub use imu::IMU;
+pub use measurement::Measurement;
+pub use msg_type::MsgType;
